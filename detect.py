@@ -100,7 +100,7 @@ def run(
 ):
     
     
-    def save_cropped_images(source, save_dir, im0, detections):
+    def save_cropped_images(source, save_dir, im0, detections, resize_dims=(512, 512)):
         # 이미지 저장 경로를 파일의 확장자와 상관없이 설정
         save_path = Path(save_dir) / Path(source).name
         save_base = save_path.stem  # 파일의 기본 이름(확장자 없음)
@@ -112,11 +112,14 @@ def run(
 
             # 감지된 영역만큼 이미지를 자름
             crop_img = im0[ymin:ymax, xmin:xmax]
+            # 이미지를 원하는 사이즈로 리사이즈
+            resized_img = cv2.resize(crop_img, resize_dims, interpolation=cv2.INTER_AREA)
+
             # 저장할 이미지 경로, 확장자는 원본 파일과 동일하게 유지
             crop_save_path = f'{save_dir}/{save_base}_crop_{i}{save_path.suffix}'
             # 이미지 저장
-            cv2.imwrite(crop_save_path, crop_img)
-            print(f'Saved cropped image {i}: {crop_save_path}')
+            cv2.imwrite(crop_save_path, resized_img)
+            print(f'Saved resized cropped image {i}: {crop_save_path}')
 
 
     source = str(source)
