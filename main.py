@@ -1,9 +1,11 @@
 import torch
 import torch.nn.functional as F
 import os
+import glob
 import subprocess
+import time
 from my_models import resnet18, resnet34, VGG, make_layers, MobileNet
-from detect_ui import BadProductDetectionSystem
+from detect_ui import BadProductDetectionSystem, QApplication
 from torchvision import transforms
 from PIL import Image
 
@@ -82,6 +84,7 @@ def predict_with_soft_voting(models, image):
     final_prediction = torch.argmax(ensemble_probs, dim=1)
     return softmax_outputs, ensemble_probs, final_prediction
 
+#hard-voting 계산을 위한 함수.
 def predict_with_hard_voting(models, image):
     votes = []
     with torch.no_grad():  # 그라디언트 계산 비활성화
@@ -95,40 +98,64 @@ def predict_with_hard_voting(models, image):
     final_prediction, _ = torch.mode(torch.stack(votes), dim=0)
     return votes, final_prediction
 
-# 모델의 경로
-data_root = os.getcwd()
-model_dir = f'{data_root}/model'
+#ui를 지속적으로 업데이트를 위한 함수
+def update_ui(window, new_total, new_good, new_defective, new_probability) -> None:
+    window.total_count = new_total
+    window.good_count = new_good
+    window.defective_count = new_defective
+    window.defective_probability = new_probability
+    window.updateUI()
 
-# 모델 로드
-models = load_models(model_dir)
+if __name__ == '__main__':
+    # 모델의 경로
+    data_root = os.getcwd()
+    model_dir = f'{data_root}/model'
 
-image_directory = f'{data_root}/test'
-#image_directory = f'{data_root}/test'
+    # 모델 로드
+    models = load_models(model_dir)
 
-#yolov5 를 호출하기 위한 경로 지정q
-current_directory = data_root.replace('\\','/')
-python_path = f'{current_directory}/yolov5/detect.py'
-weights = f'{current_directory}/yolov5/runs/train/exp/weights/best.pt'
+    image_directory = f'{data_root}/result/exp'
+    #image_directory = f'{data_root}/img_washer_train'
 
-# 분석할 이미지 또는 비디오의 경로(yolov5 폴더의 data)
-source = 'yolov5/data/images'
-# 감지 결과를 저장할 디렉토리 (현재 폴더의 새로만든 result 폴더)
-output_dir = 'result'  
-run_detection(python_path, weights, source, output_dir)
+    #yolov5 를 호출하기 위한 경로 지정
+    current_directory = data_root.replace('\\','/')
+    python_path = f'{current_directory}/yolov5/detect.py'
+    weights = f'{current_directory}/train/exp/weights/best.pt'
 
-
-
-# 해당 디렉토리의 모든 .jpg 파일을 찾아서 처리
-for filename in os.listdir(image_directory):
-    if filename.endswith('.jpg'):
-        image_path = os.path.join(image_directory, filename)
+    # 분석할 이미지 또는 비디오의 경로(yolov5 폴더의 data)
+    source = 'yolov5/data/images'
+    # 감지 결과를 저장할 디렉토리 (현재 폴더의 새로만든 result 폴더)
+    output_dir = 'result'  
+    
+    while True:
+        # 해당 디렉토리에 .jpg 파일이 있는지 확인
+        jpg_files = glob.glob(f"{current_directory}/{source}/*.jpg")
+        if jpg_files:  # .jpg 파일이 하나라도 존재하는 경우
+            #만약에 source에 이미지가 존재하면 yolov5를 통해 탐색
+            run_detection(python_path, weights, source, output_dir)
+            # 파일 삭제를 위한 사용자의 확인 받기
+            for file in jpg_files:
+                os.remove(file)
+        else:
+            time.sleep(0.2)
+            continue
         
-        # 이미지 전처리
-        image = transform_image(image_path)
         
-        # 예측 수행
-        individual_probas, ensemble_probas, final_prediction = predict_with_soft_voting(models, image)
-        #votes, final_prediction = predict_with_hard_voting(models, image)
+        # 해당 디렉토리의 모든 crop된 .jpg 파일을 찾아서 처리
+        for filename in os.listdir(image_directory):
+            if filename.endswith('_crop_0.jpg'):
+                image_path = os.path.join(image_directory, filename)
+                
+                # 이미지 전처리
+                image = transform_image(image_path)
+                
+                # 예측 수행
+                individual_probas, ensemble_probas, final_prediction = predict_with_soft_voting(models, image)
+                #votes, final_prediction = predict_with_hard_voting(models, image)
 
-        print(f"File: {filename} - Predicted Class: {final_prediction.item()}")
+                print(f"File: {filename} - Predicted Class: {final_prediction.item()}")
+        
 
+        time.sleep(0.5)
+
+        break
