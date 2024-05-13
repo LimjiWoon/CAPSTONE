@@ -1,13 +1,59 @@
 import torch
 import torch.nn.functional as F
+import sys
 import os
 import glob
 import subprocess
 import time
 from my_models import resnet18, resnet34, VGG, make_layers, MobileNet
-from detect_ui import BadProductDetectionSystem, QApplication
+from PyQt5.QtWidgets import QApplication
+from PyQt5.QtCore import QThread, pyqtSignal
+from detect_ui import BadProductDetectionSystem
 from torchvision import transforms
 from PIL import Image
+
+class DetectionThread(QThread):
+    update_count = pyqtSignal(int, int)  # 신호 정의
+
+    def __init__(self, model_dir, current_directory, source, output_dir):
+        super().__init__()
+        self.current_directory = current_directory
+        self.source = source
+        self.output_dir = output_dir
+        # 모델 로드를 메인 스레드로 이동
+        self.models = load_models(model_dir)
+
+    def run(self):
+        while True:
+            jpg_files = glob.glob(f"{self.current_directory}/{self.source}/*.jpg")
+            if jpg_files:
+                run_detection(python_path, weights, self.source, self.output_dir)
+                for file in jpg_files:
+                    os.remove(file)
+            else:
+                print("No files found, sleeping...")
+                time.sleep(5)
+                continue
+
+            # 결과 폴더에서 파일 처리
+            image_directory = f'{self.current_directory}/result/exp'
+            for filename in os.listdir(image_directory):
+                if filename.endswith('_crop_0.jpg'):
+                    image_path = os.path.join(image_directory, filename)
+                    image = transform_image(image_path)
+                    _, _, final_prediction = predict_with_soft_voting(self.models, image)
+
+                    if final_prediction.item() == 1:
+                        self.update_count.emit(1, 0)  # 정품 수 1 증가
+                        #추가 코드 작성 바람(아두이노 연결)
+                    else:
+                        self.update_count.emit(0, 1)  # 불량품 수 1 증가
+                        #추가 코드 작성 바람(아두이노 연결)
+
+                    #해당 파일을 삭제한다.
+                    file_path = os.path.join(image_directory, filename)
+                    os.remove(file_path)
+                    
 
 #탐색 코드
 def run_detection(python_path ,weights_path, source, output_dir):
@@ -98,14 +144,6 @@ def predict_with_hard_voting(models, image):
     final_prediction, _ = torch.mode(torch.stack(votes), dim=0)
     return votes, final_prediction
 
-#ui를 지속적으로 업데이트를 위한 함수
-def update_ui(window, new_total, new_good, new_defective, new_probability) -> None:
-    window.total_count = new_total
-    window.good_count = new_good
-    window.defective_count = new_defective
-    window.defective_probability = new_probability
-    window.updateUI()
-
 if __name__ == '__main__':
     # 모델의 경로
     data_root = os.getcwd()
@@ -125,37 +163,16 @@ if __name__ == '__main__':
     # 분석할 이미지 또는 비디오의 경로(yolov5 폴더의 data)
     source = 'yolov5/data/images'
     # 감지 결과를 저장할 디렉토리 (현재 폴더의 새로만든 result 폴더)
-    output_dir = 'result'  
+    output_dir = 'result'
+
+    #UI를 띄워서 실시간으로 확인
+    good_count = 0
+    defective_count = 0
+    app = QApplication(sys.argv)
+    window = BadProductDetectionSystem(good_count, defective_count)
     
-    while True:
-        # 해당 디렉토리에 .jpg 파일이 있는지 확인
-        jpg_files = glob.glob(f"{current_directory}/{source}/*.jpg")
-        if jpg_files:  # .jpg 파일이 하나라도 존재하는 경우
-            #만약에 source에 이미지가 존재하면 yolov5를 통해 탐색
-            run_detection(python_path, weights, source, output_dir)
-            # 파일 삭제를 위한 사용자의 확인 받기
-            for file in jpg_files:
-                os.remove(file)
-        else:
-            time.sleep(0.2)
-            continue
-        
-        
-        # 해당 디렉토리의 모든 crop된 .jpg 파일을 찾아서 처리
-        for filename in os.listdir(image_directory):
-            if filename.endswith('_crop_0.jpg'):
-                image_path = os.path.join(image_directory, filename)
-                
-                # 이미지 전처리
-                image = transform_image(image_path)
-                
-                # 예측 수행
-                individual_probas, ensemble_probas, final_prediction = predict_with_soft_voting(models, image)
-                #votes, final_prediction = predict_with_hard_voting(models, image)
+    detection_thread = DetectionThread(model_dir, current_directory, source, output_dir)
+    detection_thread.update_count.connect(window.updateUI)
+    detection_thread.start()
 
-                print(f"File: {filename} - Predicted Class: {final_prediction.item()}")
-        
-
-        time.sleep(0.5)
-
-        break
+    sys.exit(app.exec_())

@@ -5,12 +5,16 @@ from PyQt5.QtGui import QIcon, QPixmap
 from PyQt5 import QtCore
 
 class BadProductDetectionSystem(QWidget):
-    def __init__(self, total_count, good_count, defective_count, defective_probability):
+    def __init__(self, good_count, defective_count):
         super().__init__()
-        self.total_count = total_count
+        self.is_running = True
+        self.total_count = good_count + defective_count
         self.good_count = good_count
         self.defective_count = defective_count
-        self.defective_probability = defective_probability
+        if self.defective_count == 0:
+            self.defective_probability = 0
+        else:
+            self.defective_probability = self.defective_count / self.total_count * 100
         self.labels = {}  # 레이블 참조를 저장할 딕셔너리
         self.initUI()
 
@@ -30,7 +34,7 @@ class BadProductDetectionSystem(QWidget):
             '총 개수': self.total_count,
             '정품 개수': self.good_count,
             '불량품 개수': self.defective_count,
-            '불량품 확률': self.defective_probability
+            '불량품 확률': f"{self.defective_probability:.2f}%"
         }
 
         for i, (label, value) in enumerate(labels_info.items()):
@@ -49,18 +53,22 @@ class BadProductDetectionSystem(QWidget):
         self.setGeometry(100, 100, 600, 300)
         self.show()
 
-    def updateUI(self, total_count, good_count, defective_count, defective_probability):
-        # Update internal state
-        self.total_count = total_count
-        self.good_count = good_count
-        self.defective_count = defective_count
-        self.defective_probability = defective_probability
+    def updateUI(self, additional_good, additional_defective):
+        # 누적된 수량을 업데이트
+        self.good_count += additional_good
+        self.defective_count += additional_defective
+        self.total_count = self.good_count + self.defective_count
+        if self.total_count > 0:
+            self.defective_probability = self.defective_count / self.total_count * 100
+        else:
+            self.defective_probability = 0
         
-        # Update labels
+        # 레이블 업데이트
         self.labels['총 개수'].setText(f"총 개수: {self.total_count}")
         self.labels['정품 개수'].setText(f"정품 개수: {self.good_count}")
         self.labels['불량품 개수'].setText(f"불량품 개수: {self.defective_count}")
-        self.labels['불량품 확률'].setText(f"불량품 확률: {self.defective_probability:.2f}")  # 확률은 소수점 2자리까지 표시
+        self.labels['불량품 확률'].setText(f"불량품 확률: {self.defective_probability:.2f}%")
+
 
     #종료시 출력할 문구
     def closeEvent(self, event):
@@ -69,7 +77,7 @@ class BadProductDetectionSystem(QWidget):
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)
-    window = BadProductDetectionSystem(100, 90, 10, 0.1)
+    window = BadProductDetectionSystem(90, 0)
     time.sleep(2)
-    window.updateUI(200, 180, 20, 0.1)  # 예시 업데이트 호출
+    window.updateUI(180, 20)  # 예시 업데이트 호출
     sys.exit(app.exec_())
