@@ -5,7 +5,7 @@ import os
 import glob
 import subprocess
 import time
-from my_models import resnet18, resnet34, VGG, make_layers, MobileNet
+from my_models import resnet18, resnet34, resnet50, VGG, make_layers, MobileNet
 from PyQt5.QtWidgets import QApplication
 from PyQt5.QtCore import QThread, pyqtSignal
 from detect_ui import BadProductDetectionSystem
@@ -72,6 +72,7 @@ def load_models(model_dir):
     # 모델 인스턴스 생성
     resnet18_model = resnet18()
     resnet34_model = resnet34()
+    resnet50_model = resnet50()
     
     # VGG16 모델 설정
     cfg = [64, 64, 'M', 128, 128, 'M', 256, 256, 256, 'M', 512, 512, 512, 'M', 512, 512, 512, 'M']
@@ -83,16 +84,18 @@ def load_models(model_dir):
     # 모델들의 상태 로드
     resnet18_model.load_state_dict(torch.load(os.path.join(model_dir, 'resnet18_model.pth')))
     resnet34_model.load_state_dict(torch.load(os.path.join(model_dir, 'resnet34_model.pth')))
+    resnet50_model.load_state_dict(torch.load(os.path.join(model_dir, 'resnet50_model.pth')))
     vgg16_model.load_state_dict(torch.load(os.path.join(model_dir, 'vgg16_model.pth')))
     mobile_net_model.load_state_dict(torch.load(os.path.join(model_dir, 'mobilenet_model.pth')))
 
     # 평가 모드 설정
     resnet18_model.eval()
     resnet34_model.eval()
+    resnet50_model.eval()
     vgg16_model.eval()
     mobile_net_model.eval()
 
-    return resnet18_model, resnet34_model, vgg16_model, mobile_net_model
+    return resnet18_model, resnet34_model, resnet50_model,vgg16_model, mobile_net_model
 
 def transform_image(image_path):
     #데이터 증강기법 transform
@@ -144,6 +147,28 @@ def predict_with_hard_voting(models, image):
     final_prediction, _ = torch.mode(torch.stack(votes), dim=0)
     return votes, final_prediction
 
+#앙상블이 잘 됬는지 확인하기 위한 함수
+def process_images(image_directory, models):
+    count = 0
+    true_0 = 0
+    true_1 = 0
+    for filename in os.listdir(image_directory):
+        if filename.endswith(".jpg"):
+            image_path = os.path.join(image_directory, filename)
+            # 이미지 파일을 전처리하여 텐서로 변환
+            image = transform_image(image_path)
+            # 이미지를 모델에 전달하여 결과를 출력
+            _, _, final_prediction = predict_with_soft_voting(models, image)
+            count += 1
+            if count < 96 or count > 299:
+                if final_prediction.item() == 1:
+                    true_1 += 1
+            else:
+                if final_prediction.item() == 0:
+                    true_0 += 1
+                    
+            print(f"{filename} 결과: {final_prediction}")
+    print(f"true 0: {true_0}, true 1: {true_1}")
 if __name__ == '__main__':
     # 모델의 경로
     data_root = os.getcwd()
@@ -152,27 +177,32 @@ if __name__ == '__main__':
     # 모델 로드
     models = load_models(model_dir)
 
-    image_directory = f'{data_root}/result/exp'
-    #image_directory = f'{data_root}/img_washer_train'
+    #image_directory = f'{data_root}/result/exp'
+    image_directory = f'{data_root}/img_washer_train'
+
+    #제대로 됬는지 확인하기 위한 코드
+    process_images(image_directory, models)
+
+    #아래는 실시간 감지를 위한 코드임 추후 #을 지우면 됨
 
     #yolov5 를 호출하기 위한 경로 지정
-    current_directory = data_root.replace('\\','/')
-    python_path = f'{current_directory}/yolov5/detect.py'
-    weights = f'{current_directory}/train/exp/weights/best.pt'
+    #current_directory = data_root.replace('\\','/')
+    #python_path = f'{current_directory}/yolov5/detect.py'
+    #weights = f'{current_directory}/train/exp/weights/best.pt'
 
     # 분석할 이미지 또는 비디오의 경로(yolov5 폴더의 data)
-    source = 'yolov5/data/images'
+    #source = 'yolov5/data/images'
     # 감지 결과를 저장할 디렉토리 (현재 폴더의 새로만든 result 폴더)
-    output_dir = 'result'
+    #output_dir = 'result'
 
     #UI를 띄워서 실시간으로 확인
-    good_count = 0
-    defective_count = 0
-    app = QApplication(sys.argv)
-    window = BadProductDetectionSystem(good_count, defective_count)
+    #good_count = 0
+    #defective_count = 0
+    #app = QApplication(sys.argv)
+    #window = BadProductDetectionSystem(good_count, defective_count)
     
-    detection_thread = DetectionThread(model_dir, current_directory, source, output_dir)
-    detection_thread.update_count.connect(window.updateUI)
-    detection_thread.start()
+    #detection_thread = DetectionThread(model_dir, current_directory, source, output_dir)
+    #detection_thread.update_count.connect(window.updateUI)
+    #detection_thread.start()
 
-    sys.exit(app.exec_())
+    #sys.exit(app.exec_())
