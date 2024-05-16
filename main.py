@@ -69,33 +69,43 @@ def run_detection(python_path ,weights_path, source, output_dir):
 
 
 def load_models(model_dir):
-    # 모델 인스턴스 생성
-    resnet18_model = resnet18()
+    models = {}
+    
+    # ResNet 모델 설정
+    #resnet18_model = resnet18()
     resnet34_model = resnet34()
-    resnet50_model = resnet50()
+    #resnet50_model = resnet50()
     
     # VGG16 모델 설정
-    cfg = [64, 64, 'M', 128, 128, 'M', 256, 256, 256, 'M', 512, 512, 512, 'M', 512, 512, 512, 'M']
-    vgg16_features = make_layers(cfg, batch_norm=True)
-    vgg16_model = VGG(vgg16_features, num_classes=2)
+    #cfg = [64, 64, 'M', 128, 128, 'M', 256, 256, 256, 'M', 512, 512, 512, 'M', 512, 512, 512, 'M']
+    #vgg16_features = make_layers(cfg, batch_norm=True)
+    #vgg16_model = VGG(vgg16_features, num_classes=2)
     
     mobile_net_model = MobileNet(num_classes=2)
 
     # 모델들의 상태 로드
-    resnet18_model.load_state_dict(torch.load(os.path.join(model_dir, 'resnet18_model.pth')))
+    #resnet18_model.load_state_dict(torch.load(os.path.join(model_dir, 'resnet18_model.pth')))
     resnet34_model.load_state_dict(torch.load(os.path.join(model_dir, 'resnet34_model.pth')))
-    resnet50_model.load_state_dict(torch.load(os.path.join(model_dir, 'resnet50_model.pth')))
-    vgg16_model.load_state_dict(torch.load(os.path.join(model_dir, 'vgg16_model.pth')))
+    #resnet50_model.load_state_dict(torch.load(os.path.join(model_dir, 'resnet50_model.pth')))
+    #vgg16_model.load_state_dict(torch.load(os.path.join(model_dir, 'vgg16_model.pth')))
     mobile_net_model.load_state_dict(torch.load(os.path.join(model_dir, 'mobilenet_model.pth')))
 
     # 평가 모드 설정
-    resnet18_model.eval()
+    #resnet18_model.eval()
     resnet34_model.eval()
-    resnet50_model.eval()
-    vgg16_model.eval()
+    #resnet50_model.eval()
+    #vgg16_model.eval()
     mobile_net_model.eval()
 
-    return resnet18_model, resnet34_model, resnet50_model,vgg16_model, mobile_net_model
+    # 모델들을 딕셔너리에 저장
+    #models['resnet18'] = resnet18_model
+    models['resnet34'] = resnet34_model
+    #models['resnet50'] = resnet50_model
+    #models['vgg16'] = vgg16_model
+    models['mobilenet'] = mobile_net_model
+
+    return models
+
 
 def transform_image(image_path):
     #데이터 증강기법 transform
@@ -119,33 +129,16 @@ def transform_image(image_path):
 
 def predict_with_soft_voting(models, image):
     softmax_outputs = []
-    with torch.no_grad():  # 그라디언트 계산 비활성화
-        for model in models:
-            logits = model(image)  # 모델의 로짓 출력
-            probs = F.softmax(logits, dim=1)  # 로짓을 확률로 변환
+    with torch.no_grad():
+        for model in models.values():  # 딕셔너리의 값(모델)들을 순회
+            logits = model(image)
+            probs = F.softmax(logits, dim=1)
             softmax_outputs.append(probs)
-        
-    # 소프트 보팅을 통한 결과 계산
-    # 각 모델의 확률 출력을 쌓고 평균을 계산
-    ensemble_probs = torch.mean(torch.stack(softmax_outputs), dim=0)
     
-    # 최종 예측 클래스 결정
+    ensemble_probs = torch.mean(torch.stack(softmax_outputs), dim=0)
     final_prediction = torch.argmax(ensemble_probs, dim=1)
     return softmax_outputs, ensemble_probs, final_prediction
 
-#hard-voting 계산을 위한 함수.
-def predict_with_hard_voting(models, image):
-    votes = []
-    with torch.no_grad():  # 그라디언트 계산 비활성화
-        for model in models:
-            logits = model(image)  # 모델의 로짓 출력
-            predicted_class = torch.argmax(logits, dim=1)  # 가장 확률이 높은 클래스 선택
-            votes.append(predicted_class)
-    
-    # 하드 보팅을 통한 결과 계산
-    # torch.mode를 사용하여 가장 빈번한 값(최빈값)을 찾음
-    final_prediction, _ = torch.mode(torch.stack(votes), dim=0)
-    return votes, final_prediction
 
 #앙상블이 잘 됬는지 확인하기 위한 함수
 def process_images(image_directory, models):
@@ -155,10 +148,8 @@ def process_images(image_directory, models):
     for filename in os.listdir(image_directory):
         if filename.endswith(".jpg"):
             image_path = os.path.join(image_directory, filename)
-            # 이미지 파일을 전처리하여 텐서로 변환
             image = transform_image(image_path)
-            # 이미지를 모델에 전달하여 결과를 출력
-            _, _, final_prediction = predict_with_soft_voting(models, image)
+            _, _, final_prediction = predict_with_soft_voting(models.values(), image)
             count += 1
             if count < 96 or count > 299:
                 if final_prediction.item() == 1:
@@ -169,6 +160,37 @@ def process_images(image_directory, models):
                     
             print(f"{filename} 결과: {final_prediction}")
     print(f"true 0: {true_0}, true 1: {true_1}")
+
+#앙상블 모델 평가를 위한 함수
+def analyze_model_contributions(models, image):
+    model_contributions = {}
+    with torch.no_grad():
+        for model_name, model in models.items():
+            logits = model(image)
+            probs = F.softmax(logits, dim=1)
+            model_contributions[model_name] = probs
+    
+    return model_contributions
+
+
+# 평가를 위한 이미지 처리 함수
+def analyze_process_images(image_directory, models):
+    for filename in os.listdir(image_directory):
+        if filename.endswith(".jpg"):
+            image_path = os.path.join(image_directory, filename)
+            image = transform_image(image_path)
+            model_contributions = analyze_model_contributions(models, image)
+            
+            for model_name, contribution in model_contributions.items():
+                print(f"{filename}의 {model_name} 모델 기여도: {contribution.squeeze().tolist()}")
+
+
+
+def check_loaded_models(models):
+    print("Loaded models:")
+    for name, model in models.items():
+        print(f"{name}: {model.__class__.__name__}")
+
 if __name__ == '__main__':
     # 모델의 경로
     data_root = os.getcwd()
@@ -177,32 +199,46 @@ if __name__ == '__main__':
     # 모델 로드
     models = load_models(model_dir)
 
-    #image_directory = f'{data_root}/result/exp'
-    image_directory = f'{data_root}/img_washer_train'
+    ##########################################################
+    #아래 코드는 모델 및 성능 평가를 위한 코드임 테스트 용도
 
-    #제대로 됬는지 확인하기 위한 코드
-    process_images(image_directory, models)
+    #경로 지정
+    #image_directory = f'{data_root}/img_washer_train'
 
-    #아래는 실시간 감지를 위한 코드임 추후 #을 지우면 됨
+    #모델이 잘 들어갔는지 확인
+    #check_loaded_models(models)
+
+    #각각의 모델들이 이미지를 잘 처리하고 있는지 확인
+    #analyze_process_images(image_directory, models)
+
+    #모델들이 잘 예측하고 있는지 확인
+    #process_images(image_directory, models)
+
+    ###########################################################
+
+    #아래는 실시간 감지를 위한 코드임 추후
+    
+    #경로 지정
+    image_directory = f'{data_root}/result/exp'
 
     #yolov5 를 호출하기 위한 경로 지정
-    #current_directory = data_root.replace('\\','/')
-    #python_path = f'{current_directory}/yolov5/detect.py'
-    #weights = f'{current_directory}/train/exp/weights/best.pt'
+    current_directory = data_root.replace('\\','/')
+    python_path = f'{current_directory}/yolov5/detect.py'
+    weights = f'{current_directory}/train/exp/weights/best.pt'
 
     # 분석할 이미지 또는 비디오의 경로(yolov5 폴더의 data)
-    #source = 'yolov5/data/images'
+    source = 'yolov5/data/images'
     # 감지 결과를 저장할 디렉토리 (현재 폴더의 새로만든 result 폴더)
-    #output_dir = 'result'
+    output_dir = 'result'
 
     #UI를 띄워서 실시간으로 확인
-    #good_count = 0
-    #defective_count = 0
-    #app = QApplication(sys.argv)
-    #window = BadProductDetectionSystem(good_count, defective_count)
+    good_count = 0
+    defective_count = 0
+    app = QApplication(sys.argv)
+    window = BadProductDetectionSystem(good_count, defective_count)
     
-    #detection_thread = DetectionThread(model_dir, current_directory, source, output_dir)
-    #detection_thread.update_count.connect(window.updateUI)
-    #detection_thread.start()
+    detection_thread = DetectionThread(model_dir, current_directory, source, output_dir)
+    detection_thread.update_count.connect(window.updateUI)
+    detection_thread.start()
 
-    #sys.exit(app.exec_())
+    sys.exit(app.exec_())
