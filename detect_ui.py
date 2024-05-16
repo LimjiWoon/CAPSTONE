@@ -1,8 +1,8 @@
-import sys
 import time
+import sys
 from PyQt5.QtWidgets import QApplication, QWidget, QLabel, QGridLayout
-from PyQt5.QtGui import QIcon, QPixmap
-from PyQt5 import QtCore
+from PyQt5.QtGui import QPixmap
+from PyQt5.QtCore import Qt
 
 class BadProductDetectionSystem(QWidget):
     def __init__(self, good_count, defective_count):
@@ -39,18 +39,16 @@ class BadProductDetectionSystem(QWidget):
 
         for i, (label, value) in enumerate(labels_info.items()):
             label_widget = QLabel(f"{label}: {value}")
-            label_widget.setAlignment(QtCore.Qt.AlignCenter)
+            label_widget.setAlignment(Qt.AlignCenter)
             grid.addWidget(label_widget, i, 0)
             self.labels[label] = label_widget
 
-        icon_label = QLabel()
-        pixmap = QPixmap('icon.png')
-        icon_label.setPixmap(pixmap)
-        icon_label.setAlignment(QtCore.Qt.AlignCenter)
-        grid.addWidget(icon_label, 0, 1, len(labels_info), 1)
+        self.icon_label = QLabel()
+        self.icon_label.setAlignment(Qt.AlignCenter)
+        grid.addWidget(self.icon_label, 0, 1, len(labels_info), 1)
 
         # 창 크기 조정
-        self.setGeometry(100, 100, 600, 300)
+        self.setGeometry(100, 100, 800, 600)
         self.show()
 
     def updateUI(self, additional_good, additional_defective):
@@ -69,8 +67,11 @@ class BadProductDetectionSystem(QWidget):
         self.labels['불량품 개수'].setText(f"불량품 개수: {self.defective_count}")
         self.labels['불량품 확률'].setText(f"불량품 확률: {self.defective_probability:.2f}%")
 
+    def updateImage(self, image_path):
+        pixmap = QPixmap(image_path)
+        self.icon_label.setPixmap(pixmap.scaled(400, 400, Qt.KeepAspectRatio))
 
-    #종료시 출력할 문구
+    # 종료 시 출력할 문구
     def closeEvent(self, event):
         print("Closing the application.")
         event.accept()

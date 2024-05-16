@@ -25,8 +25,42 @@
 이 파일은 메인 프로그램 파일입니다. 다음 작업을 수행합니다:
 1. 수정된 `detect.py`를 사용하여 지정된 폴더에 있는 이미지에서 와셔를 탐지합니다.
 2. 탐지 결과와 잘린 이미지를 `result` 폴더에 저장합니다.
-3. 잘린 이미지를 사전 학습된 모델(ResNet18, ResNet34, VGG16, MobileNet)의 앙상블을 사용하여 분류하고 소프트 보팅을 통해 최종 분류 결과를 도출합니다.
+3. 잘린 이미지를 사전 학습된 모델(ResNet18, ResNet34, ResNet50, VGG16, MobileNet)의 앙상블을 사용하여 분류하고 소프트 보팅을 통해 최종 분류 결과를 도출합니다.
 4. 결과를 실시간 UI에 업데이트합니다.
+
+### my_models.py
+이 파일은 학습한 모델의 구조를 담은 파일입니다. 각각의 학습된 모델들은 해당 모델들의 구조가 있어야 불러올 수 있습니다:
+1. ResNet(18,34,50)
+2. VGG16
+3. MobileNet
+
+### model_train.ipynb
+각각의 모델들을 학습시키기 위해 사용한 쥬피터 노트북입니다.
+
+### detect_ui.py
+이 파일은 pyQt5로 실시간 와셔의 탐지를 시각화하기 위한 ui창의 기본 구조를 가지고 있습니다.
+
+### washer_train.csv
+폴더 img_washer_train에서의 모든 사진의 라벨링 정보를 가진 csv파일입니다. 해당 csv파일은 [사진이름.jpg, target] 으로 구성되어 있습니다.
+
+## 폴더
+
+### nows
+실시간 ui 감지 때 사용할 임의의 test 데이터를 가지고 있습니다.
+
+### train
+해당 파일은 custom dataset으로 학습된 yolov5의 weight 정보를 가진 폴더입니다.
+
+### test
+모델의 예측을 잘 하고 있는지 확인하기 위해 사용한 test dataset 중 하나입니다.
+
+### models
+학습된 각각의 모델들(ResNet18, ResNet34, ResNet50, VGG16, MobileNet)의 weight과 bias를 저장한 폴더입니다. 
+
+### img_washer_train
+img_washer_train은 img_washer_train.zip파일의 압축을 푼 것으로 모델이 학습할 와셔의 데이터이자 모델들의 앙상블 결과가 잘 되었는지 test dataset으로 사용되었습니다.
+
+###
 
 ## 사용법
 

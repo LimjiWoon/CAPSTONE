@@ -14,13 +14,13 @@ from PIL import Image
 
 class DetectionThread(QThread):
     update_count = pyqtSignal(int, int)  # 신호 정의
+    update_image = pyqtSignal(str)       # 이미지 업데이트 신호 정의
 
     def __init__(self, model_dir, current_directory, source, output_dir):
         super().__init__()
         self.current_directory = current_directory
         self.source = source
         self.output_dir = output_dir
-        # 모델 로드를 메인 스레드로 이동
         self.models = load_models(model_dir)
 
     def run(self):
@@ -38,22 +38,23 @@ class DetectionThread(QThread):
             # 결과 폴더에서 파일 처리
             image_directory = f'{self.current_directory}/result/exp'
             for filename in os.listdir(image_directory):
-                if filename.endswith('_crop_0.jpg'):
+                if filename.endswith('_crop_0.jpg'):  # 특정 파일 필터링 가능
                     image_path = os.path.join(image_directory, filename)
                     image = transform_image(image_path)
                     _, _, final_prediction = predict_with_soft_voting(self.models, image)
 
                     if final_prediction.item() == 1:
                         self.update_count.emit(1, 0)  # 정품 수 1 증가
-                        #추가 코드 작성 바람(아두이노 연결)
+                        # 추가 코드 작성 바람(아두이노 연결)
                     else:
                         self.update_count.emit(0, 1)  # 불량품 수 1 증가
-                        #추가 코드 작성 바람(아두이노 연결)
+                        # 추가 코드 작성 바람(아두이노 연결)
 
-                    #해당 파일을 삭제한다.
-                    file_path = os.path.join(image_directory, filename)
-                    os.remove(file_path)
-                    
+                    self.update_image.emit(image_path)  # 이미지 업데이트 신호 발생
+                    time.sleep(0.1) #신호 발생과 동시에 파일 삭제가 일어나 ui 업데이트가 일어나지 않음
+                    # 해당 파일을 삭제한다.
+                    os.remove(image_path)
+
 
 #탐색 코드
 def run_detection(python_path ,weights_path, source, output_dir):
@@ -231,7 +232,7 @@ if __name__ == '__main__':
     # 감지 결과를 저장할 디렉토리 (현재 폴더의 새로만든 result 폴더)
     output_dir = 'result'
 
-    #UI를 띄워서 실시간으로 확인
+    # UI를 띄워서 실시간으로 확인
     good_count = 0
     defective_count = 0
     app = QApplication(sys.argv)
@@ -239,6 +240,7 @@ if __name__ == '__main__':
     
     detection_thread = DetectionThread(model_dir, current_directory, source, output_dir)
     detection_thread.update_count.connect(window.updateUI)
+    detection_thread.update_image.connect(window.updateImage)  # 이미지 업데이트 신호 연결
     detection_thread.start()
 
     sys.exit(app.exec_())
