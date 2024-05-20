@@ -5,6 +5,10 @@ import os
 import glob
 import subprocess
 import time
+import firebase_admin
+from firebase_admin import credentials, storage
+import requests
+import serial #(팀장)
 from my_models import resnet18, resnet34, resnet50, VGG, make_layers, MobileNet
 from PyQt5.QtWidgets import QApplication
 from PyQt5.QtCore import QThread, pyqtSignal
@@ -16,22 +20,28 @@ class DetectionThread(QThread):
     update_count = pyqtSignal(int, int)  # 신호 정의
     update_image = pyqtSignal(str)       # 이미지 업데이트 신호 정의
 
-    def __init__(self, model_dir, current_directory, source, output_dir):
+    def __init__(self, model_dir, current_directory, source, output_dir, bucket, ser): #ser 추가(팀장)
         super().__init__()
         self.current_directory = current_directory
         self.source = source
         self.output_dir = output_dir
         self.models = load_models(model_dir)
+        self.count = 0
+        self.bucket = bucket
+        self.ser = ser #팀장
 
     def run(self):
         while True:
+            download_image(self.count, self.source, self.bucket)
             jpg_files = glob.glob(f"{self.current_directory}/{self.source}/*.jpg")
             if jpg_files:
                 run_detection(python_path, weights, self.source, self.output_dir)
+                self.count += 1
                 for file in jpg_files:
                     os.remove(file)
             else:
                 print("No files found, sleeping...")
+                #추후 시간초 조정
                 time.sleep(5)
                 continue
 
@@ -45,16 +55,35 @@ class DetectionThread(QThread):
 
                     if final_prediction.item() == 1:
                         self.update_count.emit(1, 0)  # 정품 수 1 증가
-                        # 추가 코드 작성 바람(아두이노 연결)
+                        # 추가 코드 작성 바람(아두이노 연결) #(팀장)
+                        self.ser.write(b'0')
                     else:
                         self.update_count.emit(0, 1)  # 불량품 수 1 증가
-                        # 추가 코드 작성 바람(아두이노 연결)
+                        # 추가 코드 작성 바람(아두이노 연결) #(팀장)
+                        self.ser.write(b'1')
 
                     self.update_image.emit(image_path)  # 이미지 업데이트 신호 발생
                     time.sleep(0.1) #신호 발생과 동시에 파일 삭제가 일어나 ui 업데이트가 일어나지 않음
                     # 해당 파일을 삭제한다.
                     os.remove(image_path)
 
+#파이어베이스 다운로드 코드
+def download_image(image_number, download_dir, bucket):
+    # 파일 이름 생성
+    file_name = f"image_{image_number}.jpg"
+    
+    # Firebase Storage에서 blob 참조 가져오기
+    blob = bucket.blob(f"image/{file_name}")
+    
+    # 다운로드 경로 생성
+    download_path = os.path.join(download_dir, file_name)
+    
+    # 파일 다운로드
+    if blob.exists():
+        blob.download_to_filename(download_path)
+        print(f"Downloaded {file_name} to {download_path}")
+    else:
+        print(f"{file_name} does not exist in the bucket.")
 
 #탐색 코드
 def run_detection(python_path ,weights_path, source, output_dir):
@@ -232,13 +261,26 @@ if __name__ == '__main__':
     # 감지 결과를 저장할 디렉토리 (현재 폴더의 새로만든 result 폴더)
     output_dir = 'result'
 
+    #아두이노 통신을 위한 시리얼 선언 #(팀장)
+    ser = serial.Serial('COM15', 9600)
+    
+    #파이어베이스 경로
+    cred = credentials.Certificate(f"{data_root}/camerasend-cf6b7-firebase-adminsdk-wzgz6-a1b3b00dbb.json")
+    firebase_admin.initialize_app(cred, {
+        'storageBucket' : 'camerasend-cf6b7.appspot.com'
+    })
+    
+    bucket = storage.bucket()
+    
+    
     # UI를 띄워서 실시간으로 확인
     good_count = 0
     defective_count = 0
+    
     app = QApplication(sys.argv)
     window = BadProductDetectionSystem(good_count, defective_count)
     
-    detection_thread = DetectionThread(model_dir, current_directory, source, output_dir)
+    detection_thread = DetectionThread(model_dir, current_directory, source, output_dir, bucket, ser) #ser 추가(팀장)
     detection_thread.update_count.connect(window.updateUI)
     detection_thread.update_image.connect(window.updateImage)  # 이미지 업데이트 신호 연결
     detection_thread.start()
