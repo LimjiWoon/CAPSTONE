@@ -81,13 +81,6 @@ img_washer_train은 img_washer_train.zip파일의 압축을 푼 것으로 모델
 | VGG-16    | 62     | 185    | 61.65%   | 61.86%    | 61.65% | 61.74%   |
 | MobileNet | 192    | 169    | 90.23%   | 90.36%    | 90.23% | 90.29%   |
 
-### 계산 공식:
-
-- **Accuracy** = \( \frac{\text{True Positive} + \text{True Negative}}{\text{Total Samples}} \)
-- **Precision** = \( \frac{\text{True Positive}}{\text{True Positive} + \text{False Positive}} \)
-- **Recall** = \( \frac{\text{True Positive}}{\text{True Positive} + \text{False Negative}} \)
-- **F1 Score** = \( 2 \times \frac{\text{Precision} \times \text{Recall}}{\text{Precision} + \text{Recall}} \)
-
 ## 앙상블 모델 결과
 
 ResNet18, ResNet34, ResNet50, VGG16, MobileNet 모델의 다양한 조합을 소프트 보팅 앙상블로 사용한 결과는 아래에 요약되어 있습니다. 가장 성능이 좋은 조합은 ResNet34와 MobileNet입니다.
